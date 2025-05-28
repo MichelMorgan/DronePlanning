@@ -1,0 +1,2249 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>Drone Planning & Google Earth Tool</title>
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.23/esri/themes/light/main.css"
+    />
+    <script src="https://js.arcgis.com/4.23/"></script>
+	
+	<script type="module">
+    import  FlightPlanningWeb  from './FlightPlanningWeb.js';
+    window._FlightPlanningWeb = new FlightPlanningWeb();
+	
+	console.log('here');
+  </script>
+  
+	<style>
+      h1 {text-align: center;}
+      p {text-align: center;}
+
+      .grid-container{
+	      display:grid;
+		    grid-template-columns: 2fr 1fr;
+		    grid-gap: 1em;
+        //border: #333 1px solid;
+	    }
+      .InputSection{
+	      display:grid;
+		    grid-template-columns:repeat(6, 1fr);
+		    grid-gap: 0em;
+        border: #333 1px solid;
+	    }
+      .InputSubSection{
+	      display:grid;
+		    grid-template-columns:repeat(2, 1fr);
+		    grid-gap: 0em;
+        padding: 1em;
+        border: #333 1px solid;
+    
+	    }
+      .InputSub3Section{
+	      display:grid;
+		    grid-template-columns:repeat(3, 1fr);
+		    grid-gap: 0em;
+        padding: 1em;
+        border: #333 1px solid;
+        
+	    }
+      .YoutubeSection{
+        border: #333 1px solid;
+	    }
+      .GraphicsSection{
+        border: #333 1px solid;
+      }
+
+      input[type="number"]::-webkit-outer-spin-button,
+      input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
+
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+        
+    </style>
+
+    <!--script async src="https://api.countapi.xyz/hit/geo-intel.xyz/1b6e53cb-4034-4b0e-ae69-24379fc71c4c?callback=websiteVisits"></script-->
+
+    <script>
+
+      var cdt = new Date(); 
+      var datetime = cdt.getFullYear() +"_"+ String(cdt.getMonth()+1).padStart(2, '0')+"_"+String(cdt.getDate()).padStart(2, '0')  + "_" +String(cdt.getHours()).padStart(2, '0')  + "_"+ String(cdt.getMinutes()).padStart(2, '0')  + "_"+ String(cdt.getSeconds()).padStart(2, '0')+"_"+String(cdt.getMilliseconds()).padStart(3, '0');
+
+      require([
+        "esri/widgets/Sketch",
+        "esri/Map",
+        "esri/Graphic",
+        "esri/layers/GraphicsLayer",
+        "esri/views/MapView",
+        "esri/form/elements/support/inputs",
+        "esri/core/watchUtils",
+        "esri/geometry/Point",
+        "esri/widgets/Locate"
+      ], function(Sketch, Map,Graphic, GraphicsLayer, MapView,inputs,watchUtils,Point,Locate) {
+
+
+        BLon = [];
+        BLat = [];
+
+        PathLon = [];
+        PathLat = [];
+
+        LaunchLon = 0.0;
+        LaunchLat = 0.0;
+
+        NLaunch=0;
+
+        MinLon=9.9e99;
+        MinLat=9.9e99;
+        MaxLon=-9.9e99;
+        MaxLat=-9.9e99;
+        
+
+        DialogString="";
+        GraphicsString="";
+
+        ProjectName="";
+
+        F=0.0;
+        PixSize=0.0;
+        NAlong=0;
+        NAcros=0;
+        H=0.0;
+
+        D2=1;
+        FlightDir=0.0;
+        Overlap=0.0;
+        Sidelap=0.0;
+        SwitchDirection=0;
+        SwitchBeginEnd=0;
+        ExtendCoverage=0;
+          
+        SnapX=0.0;
+        SnapY=0.0;
+        MoveStep=0.0;
+          
+        D3=1;
+        SpacingX=0.0;
+        SpacingAng=0.0;
+        MinTilt=0.0;
+        StepTilt=0.0;
+        MaxTilt=0.0;
+        ReverseDirection=0;
+        
+        BuildingHt=0.0;
+        NFootPrint=0;
+        Add2GoogleH=0.0;
+        MaxFootPrintLen=0.0;
+        
+        const glayer = new GraphicsLayer();
+        
+        const glayer2 = new GraphicsLayer();
+
+        IsGoLive=0;
+
+        DefaultBackground=document.getElementById("GoLive").style.background;
+        DefaultColor=document.getElementById("GoLive").style.color;
+
+        
+        const map = new Map({
+          basemap: "satellite",
+          layers: [glayer2,glayer]
+        });
+        
+        const view = new MapView({
+          container: "viewDiv",
+          map: map,
+          zoom: 18,
+          center: [-114.14820306244177,51.14151353504316]
+          
+        });
+
+        const locateBtn = new Locate({
+          view: view
+        });
+
+        const sketch = new Sketch({
+          layer: glayer,
+          view: view,
+		      availableCreateTools:["point", "polyline", "polygon"],
+
+          creationMode: "update",
+        });
+        const sketch2 = new Sketch({
+          layer: glayer2,
+          view: view,
+		      availableCreateTools:[],
+
+          creationMode: "single",
+
+          defaultUpdateOptions: {
+            enableRotation: false,
+            enableScaling: false,
+            enableZ: false,
+            multipleSelectionEnabled: false,
+            toggleToolOnClick: false
+            
+          }
+        });
+
+        var stroke = {
+          color: [255, 0, 0],
+          width: 1
+        };
+
+        var fillColor = [255, 255, 255, 0.5];
+
+        //*** Override all of the default symbol colors and sizes ***//
+        var pointSymbol = sketch.viewModel.pointSymbol;
+        pointSymbol.color = fillColor;
+        pointSymbol.outline = stroke;
+        pointSymbol.size = 8;
+
+        var polylineSymbol = sketch.viewModel.polylineSymbol;
+        polylineSymbol.color = stroke.color;
+        polylineSymbol.width = stroke.width;
+
+        var polygonSymbol = sketch.viewModel.polygonSymbol;
+        polygonSymbol.color = fillColor;
+        polygonSymbol.outline = stroke;
+
+        sketch.on("create", function (event) {
+          if (event.state === "complete") {
+            var attributes = {
+              name: "My Graphic",
+              type: event.graphic.geometry.type
+            };
+            event.graphic.attributes = attributes;
+
+            //window.alert("there");
+            if(IsGoLive==1)
+            {
+              GoLiveAction(event);
+            }
+          }
+            
+        });
+
+        sketch.on("update", function (event) {
+           if (event.state === "complete") {
+
+            //window.alert("here");
+            if(IsGoLive==1)
+            {
+              GoLiveAction(event);
+            }
+          }
+            
+        });
+
+        // check why moving the points cause problem
+
+        sketch2.on("update", function (event) {
+          const eventInfo = event.toolEventInfo;
+          if (eventInfo && eventInfo.type.includes("move")) {
+            sketch2.cancel();
+          }
+            
+        });
+
+        view.ui.add(sketch, "top-right");
+        
+        view.ui.add(locateBtn, {position: "top-left"});
+
+        var GoLiveButton = document.getElementById("GoLive");
+        GoLiveButton.addEventListener("click", GoLiveAction);
+
+        var Download_2D_KmlButton = document.getElementById("Download_2D_Kml");
+        Download_2D_KmlButton.addEventListener("click", Download_2D_KmlAction);
+
+        function Download_2D_KmlAction(evt) 
+        {
+
+
+          window._FlightPlanningWeb.Create2DKml();
+
+          var results;
+
+          results=window._FlightPlanningWeb.Get2DKml();
+
+          let filename ="Kml2D.kml";
+
+          download(filename, results);
+        }
+
+        var Download_3D_KmlButton = document.getElementById("Download_3D_Kml");
+        Download_3D_KmlButton.addEventListener("click", Download_3D_KmlAction);
+
+        function Download_3D_KmlAction(evt) 
+        {
+
+          window._FlightPlanningWeb.Create3DKml();
+
+          var results;
+
+          results=window._FlightPlanningWeb.Get3DKml();
+
+          let filename ="Kml3D.kml";
+
+          download(filename, results);
+
+          //window.location.href="download.php"+"?file="+ProjectName+"_3D.kml"+"&datetime=" + datetime;
+          
+        }
+
+        var Download_2D_Photo_WayPointsButton = document.getElementById("Download_2D_Photo_WayPoints");
+        Download_2D_Photo_WayPointsButton.addEventListener("click", Download_2D_Photo_WayPointsAction);
+
+        function Download_2D_Photo_WayPointsAction(evt) 
+        {
+          window._FlightPlanningWeb.Create2DCsv();
+
+          var results;
+
+          results=window._FlightPlanningWeb.Get2DCsv();
+
+          let filename ="Waypoints2D_photos.csv";
+
+          download(filename, results);
+
+          //window.location.href="download.php"+"?file="+ProjectName+"_2D_Photo.csv"+"&datetime=" + datetime;
+          
+        }
+
+        var Download_2D_Video_WayPointsButton = document.getElementById("Download_2D_Video_WayPoints");
+        Download_2D_Video_WayPointsButton.addEventListener("click", Download_2D_Video_WayPointsAction);
+
+        function Download_2D_Video_WayPointsAction(evt) 
+        {
+          window._FlightPlanningWeb.Create2DCsv_video();
+
+          var results;
+
+          results=window._FlightPlanningWeb.Get2DCsv_video();
+
+          let filename ="Waypoints2D_video.csv";
+
+          download(filename, results);
+
+          //window.location.href="download.php"+"?file="+ProjectName+"_2D_Video.csv"+"&datetime=" + datetime;
+          
+        }
+
+
+        var Download_3D_Photo_WayPointsButton = document.getElementById("Download_3D_Photo_WayPoints");
+        Download_3D_Photo_WayPointsButton.addEventListener("click", Download_3D_Photo_WayPointsAction);
+
+        function Download_3D_Photo_WayPointsAction(evt) 
+        {
+
+          window._FlightPlanningWeb.Create3DCsv();
+
+          var results;
+
+          results=window._FlightPlanningWeb.Get3DCsv();
+
+          let filename ="Waypoints3D_photos.csv";
+
+          download(filename, results);
+
+          //window.location.href="download.php"+"?file="+ProjectName+"_3D_Photo.csv"+"&datetime=" + datetime;
+          
+        }
+
+        var Download_3D_Video_WayPointsButton = document.getElementById("Download_3D_Video_WayPoints");
+        Download_3D_Video_WayPointsButton.addEventListener("click", Download_3D_Video_WayPointsAction);
+
+        function Download_3D_Video_WayPointsAction(evt) 
+        {
+
+          window._FlightPlanningWeb.Create3DCsv_video();
+
+          var results;
+
+          results=window._FlightPlanningWeb.Get3DCsv_video();
+
+          let filename ="Waypoints3D_video.csv";
+
+          download(filename, results);
+
+          //window.location.href="download.php"+"?file="+ProjectName+"_3D_Video.csv"+"&datetime=" + datetime;
+          
+        }
+
+
+        function WriteGraphics()
+        {
+          glayer.removeAll();
+          glayer2.removeAll();
+
+          for (let k = 0; k < BLon.length; k++)
+          {
+            mring =[];
+            for (let j = 0; j < BLon[k].length; j++)
+            {
+              pair=[];
+              pair.push(BLon[k][j]);
+              pair.push(BLat[k][j]);
+
+              mring.push(pair);
+            }
+            pair=[];
+            pair.push(BLon[k][0]);
+            pair.push(BLat[k][0]);
+
+            mring.push(pair);
+
+            
+
+            const polygon = {
+              type: "polygon",
+              rings: mring
+            };
+
+            const simpleFillSymbol = {
+              type: "simple-fill",
+              color: [255, 255, 255, 0.5],
+              outline: {
+                color: [255, 0, 0],
+                 width: 1
+             }
+            };
+
+            const polygonGraphic = new Graphic({
+              geometry: polygon,
+              symbol: simpleFillSymbol,
+
+            });
+            glayer.graphics.add(polygonGraphic);
+          }
+
+          for (let k = 0; k < PathLon.length; k++)
+          {
+            mpath =[];
+            for (let j = 0; j < PathLon[k].length; j++)
+            {
+              pair=[];
+              pair.push(PathLon[k][j]);
+              pair.push(PathLat[k][j]);
+
+              mpath.push(pair);
+            }
+
+            //mpath.push(pair);
+
+            const polyline = {
+              type: "polyline",
+              paths: mpath
+            };
+            const simpleLineSymbol = {
+              type: "simple-line",
+              color: [255, 0, 0],
+              width: 1
+            };
+
+            const polylineGraphic = new Graphic({
+              geometry: polyline,
+              symbol: simpleLineSymbol
+            });
+
+            glayer.graphics.add(polylineGraphic);
+
+          }
+
+          const point = { 
+            type: "point",
+            longitude: LaunchLon,
+            latitude: LaunchLat
+          };
+
+          const simpleMarkerSymbol = {
+            type: "simple-marker",
+            size: 8,
+            color: [255, 255, 255, 0.5],
+            outline: {
+              color: [255, 0, 0],
+              width: 1
+            }
+          };
+          const pointGraphic = new Graphic({
+            geometry: point,
+            symbol: simpleMarkerSymbol
+          });
+
+          glayer.graphics.add(pointGraphic);
+              
+        }
+        function ReadGraphics()
+        {
+          BLon = [];
+          BLat = [];
+
+          PathLon = [];
+          PathLat = [];
+
+          NLaunch=0;
+          LaunchLon=0.0;
+          LaunchLat=0.0;
+
+          MinLon=9.9e99;
+          MinLat=9.9e99;
+          MaxLon=-9.9e99;
+          MaxLat=-9.9e99;
+
+          for (let i = 0; i < glayer.graphics.length; i++)
+          {
+            let ent=glayer.graphics.getItemAt(i).geometry;
+            
+            if (ent.type=='polygon')
+            {
+              vLon = [];
+              vLat = [];
+
+              for (let k = 0; k < ent.rings[0].length-1; k++)          //-1
+              {
+                let pt=ent.getPoint(0,k);
+                  
+                vLon.push(pt.longitude);
+                vLat.push(pt.latitude);
+
+                if (pt.longitude > MaxLon) MaxLon=pt.longitude;
+                if (pt.longitude < MinLon) MinLon=pt.longitude;
+
+                if (pt.latitude > MaxLat) MaxLat=pt.latitude;
+                if (pt.latitude < MinLat) MinLat=pt.latitude;
+
+              }
+              BLon.push(vLon);
+              BLat.push(vLat);
+            }
+            if (ent.type=='polyline')
+            {
+              vLon = [];
+              vLat = [];
+
+              for (let k = 0; k < ent.paths[0].length; k++)
+              {
+                let pt=ent.getPoint(0,k);
+                  
+                vLon.push(pt.longitude);
+                vLat.push(pt.latitude);
+
+                if (pt.longitude > MaxLon) MaxLon=pt.longitude;
+                if (pt.longitude < MinLon) MinLon=pt.longitude;
+
+                if (pt.latitude > MaxLat) MaxLat=pt.latitude;
+                if (pt.latitude < MinLat) MinLat=pt.latitude;
+
+              }
+              PathLon.push(vLon);
+              PathLat.push(vLat);
+            }
+            if (ent.type=='point')
+            {
+              LaunchLon=ent.longitude;
+              LaunchLat=ent.latitude;
+
+              NLaunch = NLaunch+1;
+            }
+          }
+        }
+
+        function WriteDialog()
+        {
+
+          document.getElementById("ProjectName").value=ProjectName;
+          document.getElementById("F").value=F;
+
+          document.getElementById("PixSize").value=PixSize;
+          document.getElementById("NAlong").value=NAlong;
+          document.getElementById("NAcros").value=NAcros;
+          document.getElementById("H").value=H;
+
+          if (D2==1)
+          {
+            document.getElementById("D2").checked=true;
+          }
+          else
+          {
+            document.getElementById("D2").checked=false;
+          }
+
+          document.getElementById("FlightDir").value=FlightDir;
+          document.getElementById("Overlap").value=Overlap;
+          document.getElementById("Sidelap").value=Sidelap;
+
+          if (SwitchDirection==1)
+          {
+            document.getElementById("SwitchDirection").checked=true;
+          }
+          else
+          {
+            document.getElementById("SwitchDirection").checked=false;
+          }
+
+          if (SwitchBeginEnd==1)
+          {
+            document.getElementById("SwitchBeginEnd").checked=true;
+          }
+          else
+          {
+            document.getElementById("SwitchBeginEnd").checked=false;
+          }
+
+          if (ExtendCoverage==1)
+          {
+            document.getElementById("ExtendCoverage").checked=true;
+          }
+          else
+          {
+            document.getElementById("ExtendCoverage").checked=false;
+          }
+
+          document.getElementById("SnapX").value=SnapX;
+          document.getElementById("SnapY").value=SnapY;
+          document.getElementById("MoveStep").value=MoveStep;
+
+          if (D3==1)
+          {
+            document.getElementById("D3").checked=true;
+          }
+          else
+          {
+            document.getElementById("D3").checked=false;
+          }
+
+          document.getElementById("SpacingX").value=SpacingX;
+          document.getElementById("SpacingAng").value=SpacingAng;
+          document.getElementById("MinTilt").value=MinTilt;
+          document.getElementById("StepTilt").value=StepTilt;
+          document.getElementById("MaxTilt").value=MaxTilt;
+
+          if (ReverseDirection==1)
+          {
+            document.getElementById("ReverseDirection").checked=true;
+          }
+          else
+          {
+            document.getElementById("ReverseDirection").checked=false;
+          }
+
+          document.getElementById("BuildingHt").value=BuildingHt;
+          document.getElementById("NFootPrint").value=NFootPrint;
+          document.getElementById("Add2GoogleH").value=Add2GoogleH;
+          document.getElementById("MaxFootPrintLen").value=MaxFootPrintLen;
+
+        }
+
+        
+
+        function ReadDialog()
+        {
+          ProjectName=document.getElementById("ProjectName").value;
+
+          F=document.getElementById("F").value;
+          PixSize=document.getElementById("PixSize").value;
+          NAlong=document.getElementById("NAlong").value;
+          NAcros=document.getElementById("NAcros").value;
+          H=document.getElementById("H").value;
+
+          if ((document.getElementById("D2")).checked==true)
+          {
+            D2=1;
+          }
+          else
+          {
+            D2=0;
+          }
+
+          FlightDir=document.getElementById("FlightDir").value;
+          Overlap=document.getElementById("Overlap").value;
+          Sidelap=document.getElementById("Sidelap").value;
+          if ((document.getElementById("SwitchDirection")).checked==true)
+          {
+            SwitchDirection=1;
+          }
+          else
+          {
+            SwitchDirection=0;
+          }
+
+          if ((document.getElementById("SwitchBeginEnd")).checked==true)
+          {
+            SwitchBeginEnd=1;
+          }
+          else
+          {
+            SwitchBeginEnd=0;
+          }
+
+          if ((document.getElementById("ExtendCoverage")).checked==true)
+          {
+            ExtendCoverage=1;
+          }
+          else
+          {
+            ExtendCoverage=0;
+          }
+
+
+          SnapX=document.getElementById("SnapX").value;
+          SnapY=document.getElementById("SnapY").value;
+          MoveStep=document.getElementById("MoveStep").value;
+
+          if ((document.getElementById("D3")).checked==true)
+          {
+            D3=1;
+          }
+          else
+          {
+            D3=0;
+          }
+
+          SpacingX=document.getElementById("SpacingX").value;
+          SpacingAng=document.getElementById("SpacingAng").value;
+          MinTilt=document.getElementById("MinTilt").value;
+          StepTilt=document.getElementById("StepTilt").value;
+          MaxTilt=document.getElementById("MaxTilt").value;
+          if ((document.getElementById("ReverseDirection")).checked==true)
+          {
+             ReverseDirection=1;
+          }
+          else
+          {
+            ReverseDirection=0;
+          }
+
+          BuildingHt=document.getElementById("BuildingHt").value;
+          NFootPrint=document.getElementById("NFootPrint").value;
+          Add2GoogleH=document.getElementById("Add2GoogleH").value;
+          MaxFootPrintLen=document.getElementById("MaxFootPrintLen").value;
+        }
+
+        function Dialog2String()
+        {
+          DialogString=
+          F+" "+
+          PixSize+" "+
+          NAlong+" "+
+          NAcros+" "+
+          H+" "+
+
+          D2+" "+
+          FlightDir+" "+
+          Overlap+" "+
+          Sidelap+" "+
+          SwitchDirection+" "+
+          SwitchBeginEnd+" "+
+          ExtendCoverage+" "+
+
+          SnapX+" "+
+          SnapY+" "+
+          MoveStep+" "+
+
+          D3+" "+
+          SpacingX+" "+
+          SpacingAng+" "+
+          MinTilt+" "+
+          StepTilt+" "+
+          MaxTilt+" "+
+          ReverseDirection+" "+
+
+          BuildingHt+" "+
+          NFootPrint+" "+
+          Add2GoogleH+" "+
+          MaxFootPrintLen;
+        }
+
+        function String2Graphics()
+        {
+          BLon = [];
+          BLat = [];
+
+          PathLon = [];
+          PathLat = [];
+
+          vals=GraphicsString.split(" ");
+
+          i=0;
+
+          N=vals[i]; 
+          i++;
+
+          for (let k = 0; k < N; k++)
+          {
+            N2=vals[i];
+            i++;
+
+            vLon = [];
+            vLat = [];
+
+            for (let j = 0; j < N2; j++)
+            {
+
+              val=vals[i];
+              i++;
+              vLon.push(val);
+
+              val=vals[i];
+              i++;
+              vLat.push(val);
+            }
+            BLon.push(vLon);
+            BLat.push(vLat);
+
+          }
+
+          N=vals[i]; 
+          i++;
+
+          for (let k = 0; k < N; k++)
+          {
+            N2=vals[i];
+            i++;
+
+            vLon = [];
+            vLat = [];
+
+            for (let j = 0; j < N2; j++)
+            {
+
+              val=vals[i];
+              i++;
+              vLon.push(val);
+
+              val=vals[i];
+              i++;
+              vLat.push(val);
+            }
+            PathLon.push(vLon);
+            PathLat.push(vLat);
+
+          }
+
+          LaunchLon=vals[i];
+          i++;
+          LaunchLat=vals[i];
+          i++;
+
+        }
+
+        function String2Dialog()
+        {
+          vals=DialogString.split(" ");
+
+          i=0;
+          F=Number(vals[i]);
+          i++;
+
+          PixSize=Number(vals[i]);
+          i++;
+
+          NAlong=Number(vals[i]);
+          i++;
+
+          NAcros=Number(vals[i]);
+          i++;
+
+          H=Number(vals[i]);
+          i++;
+
+          D2=Number(vals[i]);
+          i++;
+
+          FlightDir=Number(vals[i]);
+          i++;
+
+          Overlap=Number(vals[i]);
+          i++;
+
+          Sidelap=Number(vals[i]);
+          i++;
+
+          SwitchDirection=Number(vals[i]);
+          i++;
+
+          SwitchBeginEnd=Number(vals[i]);
+          i++;
+
+          ExtendCoverage=Number(vals[i]);
+          i++;
+
+          SnapX=Number(vals[i]);
+          i++;
+
+          SnapY=Number(vals[i]);
+          i++;
+
+          MoveStep=Number(vals[i]);
+          i++;
+
+          D3=Number(vals[i]);
+          i++;
+
+          SpacingX=Number(vals[i]);
+          i++;
+
+          SpacingAng=Number(vals[i]);
+          i++;
+
+          MinTilt=Number(vals[i]);
+          i++;
+
+          StepTilt=Number(vals[i]);
+          i++;
+
+          MaxTilt=Number(vals[i]);
+          i++;
+
+          ReverseDirection=Number(vals[i]);
+          i++;
+
+          BuildingHt=Number(vals[i]);
+          i++;
+
+          NFootPrint=Number(vals[i]);
+          i++;
+
+          Add2GoogleH=Number(vals[i]);
+          i++;
+
+          MaxFootPrintLen=Number(vals[i]);
+          i++;
+        }
+
+        function Graphics2String()
+        {
+          GraphicsString="";
+
+          GraphicsString = GraphicsString + BLon.length+" ";
+            for (let i = 0; i < BLon.length; i++)
+            {
+              GraphicsString = GraphicsString +BLon[i].length+" ";
+              for (let j = 0; j < BLon[i].length; j++)
+              {
+                GraphicsString = GraphicsString +BLon[i][j]+" "+BLat[i][j]+" ";
+              }
+            }
+
+            GraphicsString = GraphicsString + PathLon.length+" ";
+            for (let i = 0; i < PathLon.length; i++)
+            {
+              GraphicsString = GraphicsString +PathLon[i].length+" ";
+              for (let j = 0; j < PathLon[i].length; j++)
+              {
+                GraphicsString = GraphicsString +PathLon[i][j]+" "+PathLat[i][j]+" ";
+              }
+            }
+
+            GraphicsString = GraphicsString + LaunchLon+" ";
+            GraphicsString = GraphicsString + LaunchLat;
+        }
+        
+
+        function GoLiveAction(evt) 
+       
+        {
+          ReadGraphics();
+
+          message="error(s):\n\n";
+          ErrorFlag=0;
+
+          if (NLaunch<1)
+          {
+            ErrorFlag=1;
+            message =message +"    Add launch point\n\n";
+          }
+          if (NLaunch>1)
+          {
+            ErrorFlag=1;
+            message =message +"    Keep only one launch point\n\n";
+          }
+          if (BLon.length<1 && PathLon.length<1)
+          {
+            ErrorFlag=1;
+            message =message +"    Add Polygon area(for 2D Mapping) or Polyline(for 3D Mapping)\n\n";
+          }
+
+          if (BLon.length<1)
+          {
+            document.getElementById("D2").checked=false;
+          }
+          
+          if (PathLon.length<1)
+          {
+            document.getElementById("D3").checked=false;
+          }
+
+          MaxLen=500.0;
+          EarthR=6371000.0
+
+          DLon=(MaxLon-MinLon);
+          DLat=(MaxLat-MinLat);
+
+          DLat=DLat*3.14159265359/180.0*EarthR;
+
+          EarthR2=EarthR*Math.cos((MaxLat+MinLat)/2.0*3.14159265359/180.0);
+
+          DLon=DLon*3.14159265359/180.0*EarthR2;
+
+          if (DLat>MaxLen)
+          {
+            ErrorFlag=1;
+            message =message +"    Project is too large along North-South!\n\n";
+            
+          }
+          if (DLon>MaxLen)
+          {
+            ErrorFlag=1;
+            message =message +"    Project is too large along East-West!\n\n";
+            
+          }
+
+          if (DLat>MaxLen || DLon>MaxLen)
+          {
+            message =message +"    Contact (michel . f .morgan @ gmail . com) if you still need to fly the site\n\n";
+            message =message +"    Remove the spaces in the email address\n\n";
+          }
+
+          
+          
+         
+          if (ErrorFlag==1)
+          {
+            window.alert(message);
+            IsGoLive=0;
+            document.getElementById("GoLive").style.background =  DefaultBackground;
+            document.getElementById("GoLive").style.color =  DefaultColor;
+            document.getElementById("GoLive").value="GoLive";
+
+            document.getElementById("Download_2D_Kml").disabled =true;
+            document.getElementById("Download_2D_Kml").style.background =  DefaultBackground;
+            document.getElementById("Download_2D_Kml").style.color =  DefaultColor;
+
+            document.getElementById("Download_3D_Kml").disabled =true;
+            document.getElementById("Download_3D_Kml").style.background =  DefaultBackground;
+            document.getElementById("Download_3D_Kml").style.color =  DefaultColor;
+
+            document.getElementById("Download_2D_Photo_WayPoints").disabled =true;
+            document.getElementById("Download_2D_Photo_WayPoints").style.background =  DefaultBackground;
+            document.getElementById("Download_2D_Photo_WayPoints").style.color =  DefaultColor;
+
+            document.getElementById("Download_2D_Video_WayPoints").disabled =true;
+            document.getElementById("Download_2D_Video_WayPoints").style.background =  DefaultBackground;
+            document.getElementById("Download_2D_Video_WayPoints").style.color =  DefaultColor;
+
+            document.getElementById("Download_3D_Photo_WayPoints").disabled =true;
+            document.getElementById("Download_3D_Photo_WayPoints").style.background =  DefaultBackground;
+            document.getElementById("Download_3D_Photo_WayPoints").style.color =  DefaultColor;
+
+            document.getElementById("Download_3D_Video_WayPoints").disabled =true;
+            document.getElementById("Download_3D_Video_WayPoints").style.background =  DefaultBackground;
+            document.getElementById("Download_3D_Video_WayPoints").style.color =  DefaultColor;
+
+          }
+          else
+          {
+            
+            
+
+
+
+            
+            Graphics2String();
+
+            ReadDialog();
+            Dialog2String();
+
+
+            //const something= window._FlightPlanningWeb.ReturnSomething();
+
+            //console.log(`something: [${something}]`);
+            
+
+            // NEW NEW
+
+            Program_Parms= DialogString +" "+ GraphicsString;
+            
+            console.log(`Program_ParmsProgram_Parms: [${Program_Parms}]`);
+
+            window._FlightPlanningWeb.SetString(Program_Parms);
+
+            (async () => {
+                await window._FlightPlanningWeb.RunAll(); 
+            
+
+            window._FlightPlanningWeb.PrintResults();
+
+            var results;
+
+            results=window._FlightPlanningWeb.GetResults();
+
+            console.log(`results: [${results}]`);
+
+
+
+            results=results.split(/\s+/);
+
+              count=0;
+              N=results[count];
+              count++;
+              
+
+              PosLon=[];
+              PosLat=[];
+              for (let k = 0; k < N; k++)
+              {
+                dummy=results[count];
+                count++;
+                PosLon.push(dummy);
+
+                dummy=results[count];
+                count++;
+                PosLat.push(dummy);
+
+              }
+
+              N=results[count];
+              count++;
+
+              FootPrintLon=[];
+              FootPrintLat=[];
+
+              for (let k = 0; k < N; k++)
+              {
+                N2=results[count];
+                count++;
+
+                vLon=[];
+                vLat=[];
+                for (let j = 0; j < N2; j++)
+                {
+                  dummy=results[count];
+                  count++;
+                  vLon.push(dummy);
+
+                  dummy=results[count];
+                  count++;
+                  vLat.push(dummy);
+                }
+                FootPrintLon.push(vLon);
+                FootPrintLat.push(vLat);
+              }
+
+              N=results[count];
+              count++;
+
+              PosLon2=[];
+              PosLat2=[];
+              for (let k = 0; k < N; k++)
+              {
+                dummy=results[count];
+                count++;
+                PosLon2.push(dummy);
+
+                dummy=results[count];
+                count++;
+                PosLat2.push(dummy);
+
+              }
+
+              N=results[count];
+              count++;
+
+              FootPrintLon2=[];
+              FootPrintLat2=[];
+
+              for (let k = 0; k < N; k++)
+              {
+                N2=results[count];
+                count++;
+
+                vLon=[];
+                vLat=[];
+                for (let j = 0; j < N2; j++)
+                {
+                  dummy=results[count];
+                  count++;
+                  vLon.push(dummy);
+
+                  dummy=results[count];
+                  count++;
+                  vLat.push(dummy);
+                }
+                FootPrintLon2.push(vLon);
+                FootPrintLat2.push(vLat);
+              }
+
+              const simpleMarkerSymbol = {
+                type: "simple-marker",
+                color: [226, 119, 40],
+                outline: {
+                  color: [255, 255, 255],
+                  width: 1
+                }
+              };
+
+              const simpleTextSymbol = {
+                type: "text",
+                color: "white",
+                haloColor: "black",
+                haloSize: "1px",
+                text: "Start",
+                font: { 
+                  size: 12,
+                  weight: "bold"
+                }
+              };
+              
+              
+              glayer2.removeAll();
+              
+              if (PosLon.length>0)
+              {
+                const point = { 
+                type: "point",
+                longitude: PosLon[0],
+                latitude: PosLat[0]
+                };
+                
+                const pointGraphic = new Graphic({
+                geometry: point,
+                symbol: simpleTextSymbol
+                });
+
+                //window.alert("displaying");
+                glayer2.graphics.add(pointGraphic);
+              }
+
+
+              for (let k = 0; k < PosLon.length; k++)
+              {
+                const point = { 
+                type: "point",
+                longitude: PosLon[k],
+                latitude: PosLat[k]
+                };
+                
+                const pointGraphic = new Graphic({
+                geometry: point,
+                symbol: simpleMarkerSymbol
+                });
+
+                glayer2.graphics.add(pointGraphic);
+
+              }
+
+              if (PosLon2.length>0)
+              {
+                const point = { 
+                type: "point",
+                longitude: PosLon2[0],
+                latitude: PosLat2[0]
+                };
+                
+                const pointGraphic = new Graphic({
+                geometry: point,
+                symbol: simpleTextSymbol
+                });
+
+                glayer2.graphics.add(pointGraphic);
+              }
+
+              for (let k = 0; k < PosLon2.length; k++)
+              {
+                const point = { 
+                type: "point",
+                longitude: PosLon2[k],
+                latitude: PosLat2[k]
+                };
+                
+                const pointGraphic = new Graphic({
+                geometry: point,
+                symbol: simpleMarkerSymbol
+                });
+
+                glayer2.graphics.add(pointGraphic);
+
+              }
+
+              mpath =[];
+              for (let k = 0; k < PosLon.length; k++)
+              {
+                pair=[];
+                pair.push(PosLon[k]);
+                pair.push(PosLat[k]);
+
+                mpath.push(pair);
+              }
+
+              
+
+              const polyline = 
+              {
+                type: "polyline",
+                paths: mpath
+              };
+
+              const simpleLineSymbol = 
+              {
+                type: "simple-line",
+                color: [226, 119, 40],
+                width: 2
+              };
+
+              const simpleLineSymbolGrey = 
+              {
+                type: "simple-line",
+                color: [200, 200, 200],
+                width: 2
+              };
+
+              const polylineGraphic = new Graphic({
+                geometry: polyline,
+                symbol: simpleLineSymbol
+              });
+
+              glayer2.graphics.add(polylineGraphic);
+
+
+             
+              for (let k = 0; k < FootPrintLon.length; k++)
+              {
+                Rand=(Math.random()-0.5)*0.00001;
+              
+              
+                mpath =[];
+                for (let j = 0; j < FootPrintLon[k].length; j++)
+                {
+                  pair=[];
+                
+                  pair.push(Number(FootPrintLon[k][j])+Rand);
+                  pair.push(Number(FootPrintLat[k][j])+Rand);
+                  mpath.push(pair);
+                }
+                pair=[];
+                
+                pair.push(Number(FootPrintLon[k][0])+Rand);          //to close the loop
+                pair.push(Number(FootPrintLat[k][0])+Rand);
+                mpath.push(pair);
+
+                const polyline2 = 
+                {
+                  type: "polyline",
+                  paths: mpath
+                };
+                const polylineGraphic2 = new Graphic({
+                  geometry: polyline2,
+                  symbol: simpleLineSymbolGrey
+                });
+
+                glayer2.graphics.add(polylineGraphic2);
+
+              }
+
+              for (let k = 0; k < FootPrintLon2.length; k++)
+              {
+                Rand=(Math.random()-0.5)*0.00001;
+              
+              
+                mpath =[];
+                for (let j = 0; j < FootPrintLon2[k].length; j++)
+                {
+                  pair=[];
+                
+                  pair.push(Number(FootPrintLon2[k][j])+Rand);
+                  pair.push(Number(FootPrintLat2[k][j])+Rand);
+                  mpath.push(pair);
+                }
+                pair=[];
+                
+                pair.push(Number(FootPrintLon2[k][0])+Rand);          //to close the loop
+                pair.push(Number(FootPrintLat2[k][0])+Rand);
+                mpath.push(pair);
+
+                const polyline2 = 
+                {
+                  type: "polyline",
+                  paths: mpath
+                };
+                const polylineGraphic2 = new Graphic({
+                  geometry: polyline2,
+                  symbol: simpleLineSymbolGrey
+                });
+
+                glayer2.graphics.add(polylineGraphic2);
+
+              }
+
+IsGoLive=1;
+            document.getElementById("GoLive").style.background =  "blue";
+            document.getElementById("GoLive").style.color =  "white";
+            document.getElementById("GoLive").value="Live";
+
+            if (document.getElementById("D2").checked==true)
+            {
+              document.getElementById("Download_2D_Kml").disabled =false;
+              document.getElementById("Download_2D_Kml").style.background =  "blue";
+              document.getElementById("Download_2D_Kml").style.color =  "white";
+
+              document.getElementById("Download_2D_Photo_WayPoints").disabled =false;
+              document.getElementById("Download_2D_Photo_WayPoints").style.background =  "blue";
+              document.getElementById("Download_2D_Photo_WayPoints").style.color =  "white";
+
+              document.getElementById("Download_2D_Video_WayPoints").disabled =false;
+              document.getElementById("Download_2D_Video_WayPoints").style.background =  "blue";
+              document.getElementById("Download_2D_Video_WayPoints").style.color =  "white";
+
+            }
+
+            if (document.getElementById("D3").checked==true)
+            {
+              document.getElementById("Download_3D_Kml").disabled =false;
+              document.getElementById("Download_3D_Kml").style.background =  "blue";
+              document.getElementById("Download_3D_Kml").style.color =  "white";
+
+              document.getElementById("Download_3D_Photo_WayPoints").disabled =false;
+              document.getElementById("Download_3D_Photo_WayPoints").style.background =  "blue";
+              document.getElementById("Download_3D_Photo_WayPoints").style.color =  "white";
+
+              document.getElementById("Download_3D_Video_WayPoints").disabled =false;
+              document.getElementById("Download_3D_Video_WayPoints").style.background =  "blue";
+              document.getElementById("Download_3D_Video_WayPoints").style.color =  "white";
+            }
+
+
+
+            })();
+
+
+
+
+
+
+
+           
+            
+          }
+        }
+        
+        document.getElementById("F").addEventListener("blur", tF);
+        document.getElementById("F").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tF(event);
+          }
+        });
+        function tF(evt)
+        {
+          itm=document.getElementById("F");
+          val=itm.value;
+          if (val> 5000)
+            itm.value=5000;
+          if (val< 0.1)
+            itm.value=0.1;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("PixSize").addEventListener("blur", tPixSize);
+        document.getElementById("PixSize").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tPixSize(event);
+          }
+        });
+        function tPixSize(evt)
+        {
+          itm=document.getElementById("PixSize");
+          val=itm.value;
+          if (val> 100)
+            itm.value=100;
+          if (val< 0.1)
+            itm.value=0.1;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("NAlong").addEventListener("blur", tNAlong);
+        document.getElementById("NAlong").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tNAlong(event);
+          }
+        });
+        function tNAlong(evt)
+        {
+          itm=document.getElementById("NAlong");
+          val=itm.value;
+          if (val> 65536)
+            itm.value=65536;
+          if (val< 256)
+            itm.value=256;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("NAcros").addEventListener("blur", tNAcros);
+        document.getElementById("NAcros").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tNAcros(event);
+          }
+        });
+        function tNAcros(evt)
+        {
+          itm=document.getElementById("NAcros");
+          val=itm.value;
+          if (val> 65536)
+            itm.value=65536;
+          if (val< 256)
+            itm.value=256;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("H").addEventListener("blur", tH);
+        document.getElementById("H").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tH(event);
+          }
+        });
+        function tH(evt)
+        {
+          itm=document.getElementById("H");
+          val=itm.value;
+          if (val> 500)
+            itm.value=500;
+          if (val< 1.0)
+            itm.value=1.0;
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("D2").addEventListener("change", cD2);
+        function cD2(evt)
+        {
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("FlightDir").addEventListener("blur", tFlightDir);
+        document.getElementById("FlightDir").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tFlightDir(event);
+          }
+        });
+        function tFlightDir(evt)
+        {
+          itm=document.getElementById("FlightDir");
+          val=itm.value;
+          if (val> 360)
+            itm.value=360;
+          if (val< 0)
+            itm.value=0;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("Overlap").addEventListener("blur", tOverlap);
+        document.getElementById("Overlap").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tOverlap(event);
+          }
+        });
+        function tOverlap(evt)
+        {
+          itm=document.getElementById("Overlap");
+          val=itm.value;
+          if (val> 95.0)
+            itm.value=95.0;
+          if (val< 5.0)
+            itm.value=5.0;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("Sidelap").addEventListener("blur", tSidelap);
+        document.getElementById("Sidelap").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tSidelap(event);
+          }
+        });
+        function tSidelap(evt)
+        {
+          itm=document.getElementById("Sidelap");
+          val=itm.value;
+          if (val> 95.0)
+            itm.value=96.0;
+          if (val< 5.0)
+            itm.value=5.0;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+
+
+        document.getElementById("SwitchDirection").addEventListener("change", cSwitchDirection);
+        function cSwitchDirection(evt)
+        {
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("SwitchBeginEnd").addEventListener("change", cSwitchBeginEnd);
+        function cSwitchBeginEnd(evt)
+        {
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("ExtendCoverage").addEventListener("change", cExtendCoverage);
+        function cExtendCoverage(evt)
+        {
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("Up").addEventListener("click", UpAction);
+        function UpAction(evt) 
+        {
+         
+          SnapY=document.getElementById("SnapY").value;
+          MoveStep=document.getElementById("MoveStep").value;
+          SnapY = Number(SnapY) + Number(MoveStep);
+          document.getElementById("SnapY").value=SnapY;
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+
+        document.getElementById("LoadProject").addEventListener("click", LoadProjectAction);
+        function LoadProjectAction(evt) 
+        {
+          let input = document.createElement('input');
+          input.type = 'file';
+          input.accept='.prj';
+          input.onchange = _this => 
+          {      
+            var reader = new FileReader();
+			      reader.onload = function()
+            {
+              IsGoLive=0;
+              document.getElementById("GoLive").style.background =  DefaultBackground;
+              document.getElementById("GoLive").style.color =  DefaultColor;
+              document.getElementById("GoLive").value="GoLive";
+
+			        var text = reader.result;
+
+              
+
+              text = text.split(/\r?\n/);
+
+              ver=text[0];
+              ProjectName=text[1];
+              DialogString=text[2];
+              GraphicsString=text[3];
+
+              console.log("ver "+ver);
+              console.log("ProjectName "+ProjectName);
+              console.log("DialogString "+DialogString);
+              console.log("GraphicsString "+GraphicsString);
+
+
+              String2Graphics();
+              String2Dialog();
+              WriteDialog();
+
+              WriteGraphics();
+
+              view.center = [LaunchLon, LaunchLat];
+              view.zoom = 18;
+
+              
+			  
+			      };
+			      reader.readAsText(input.files[0]);
+    
+          };
+          input.click();
+          
+        }
+
+        document.getElementById("SaveProject").addEventListener("click", SaveProjectAction);
+        function SaveProjectAction(evt) 
+        {
+          ReadGraphics();
+          ReadDialog();
+          Dialog2String();
+          Graphics2String();
+
+          var text="101\n"+ProjectName+"\n"+DialogString+"\n"+GraphicsString+"\n";
+          var filename=ProjectName+".prj";
+
+        download(filename, text);
+        }
+
+        function download(filename, text) {
+        var element = document.createElement('a');
+        element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+        element.setAttribute('download', filename);
+
+        element.style.display = 'none';
+        document.body.appendChild(element);
+
+        element.click();
+
+        document.body.removeChild(element);
+      }
+
+
+
+
+
+
+
+
+
+
+        document.getElementById("Down").addEventListener("click", DownAction);
+        function DownAction(evt) 
+        {
+          SnapY=document.getElementById("SnapY").value;
+          MoveStep=document.getElementById("MoveStep").value;
+          SnapY = Number(SnapY) - Number(MoveStep);
+          document.getElementById("SnapY").value=SnapY;
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("Right").addEventListener("click", RightAction);
+        function RightAction(evt) 
+        {
+          SnapX=document.getElementById("SnapX").value;
+          MoveStep=document.getElementById("MoveStep").value;
+          SnapX = Number(SnapX) + Number(MoveStep);
+          document.getElementById("SnapX").value=SnapX;
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("Left").addEventListener("click", LeftAction);
+        function LeftAction(evt) 
+        {
+          SnapX=document.getElementById("SnapX").value;
+          MoveStep=document.getElementById("MoveStep").value;
+          SnapX = Number(SnapX) - Number(MoveStep);
+          document.getElementById("SnapX").value=SnapX;
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+
+        document.getElementById("MoveStep").addEventListener("blur", tSidelap);
+        document.getElementById("MoveStep").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tMoveStep(event);
+          }
+        });
+        function tMoveStep(evt)
+        {
+          itm=document.getElementById("MoveStep");
+          val=itm.value;
+          if (val> 1000)
+            itm.value=1000;
+          if (val< 0.01)
+            itm.value=0.01;
+
+          
+        }
+
+
+
+
+
+
+
+
+
+        
+
+        document.getElementById("D3").addEventListener("change", cD3);
+        function cD3(evt)
+        {
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+
+        document.getElementById("SpacingX").addEventListener("blur", tSpacingX);
+        document.getElementById("SpacingX").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tSpacingX(event);
+          }
+        });
+        function tSpacingX(evt)
+        {
+          itm=document.getElementById("SpacingX");
+          val=itm.value;
+          if (val> 200)
+            itm.value=200;
+          if (val< 0.65)
+            itm.value=0.65;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("SpacingAng").addEventListener("blur", tSpacingAng);
+        document.getElementById("SpacingAng").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tSpacingAng(event);
+          }
+        });
+        function tSpacingAng(evt)
+        {
+          itm=document.getElementById("SpacingAng");
+          val=itm.value;
+          if (val> 359.99)
+            itm.value=359.99;
+          if (val< 5.0)
+            itm.value=5.0;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("MinTilt").addEventListener("blur", tMinTilt);
+        document.getElementById("MinTilt").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tMinTilt(event);
+          }
+        });
+        function tMinTilt(evt)
+        {
+          itm=document.getElementById("MinTilt");
+          val=itm.value;
+          if (val> 90)
+            itm.value=90;
+          if (val< 0)
+            itm.value=0;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("StepTilt").addEventListener("blur", tStepTilt);
+        document.getElementById("StepTilt").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tStepTilt(event);
+          }
+        });
+        function tStepTilt(evt)
+        {
+          itm=document.getElementById("StepTilt");
+          val=itm.value;
+          if (val> 90)
+            itm.value=90;
+          if (val< 5.0)
+            itm.value=5.0;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("MaxTilt").addEventListener("blur", tMaxTilt);
+        document.getElementById("MaxTilt").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tMaxTilt(event);
+          }
+        });
+        function tMaxTilt(evt)
+        {
+          itm=document.getElementById("MaxTilt");
+          val=itm.value;
+          if (val> 90)
+            itm.value=90;
+          if (val< 0)
+            itm.value=0;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("ReverseDirection").addEventListener("change", cReverseDirection);
+        function cReverseDirection(evt)
+        {
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("BuildingHt").addEventListener("blur", tBuildingHt);
+        document.getElementById("BuildingHt").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tBuildingHt(event);
+          }
+        });
+        function tBuildingHt(evt)
+        {
+          itm=document.getElementById("BuildingHt");
+          val=itm.value;
+          if (val> 300)
+            itm.value=300;
+          if (val< 0)
+            itm.value=0;
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("NFootPrint").addEventListener("blur", tNFootPrint);
+        document.getElementById("NFootPrint").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tNFootPrint(event);
+          }
+        });
+        function tNFootPrint(evt)
+        {
+          itm=document.getElementById("NFootPrint");
+          val=itm.value;
+          if (val> 12)
+            itm.value=12;
+          if (val< 3)
+            itm.value=3;
+          
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+        document.getElementById("Add2GoogleH").addEventListener("blur", tAdd2GoogleH);
+        document.getElementById("Add2GoogleH").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tAdd2GoogleH(event);
+          }
+        });
+        function tAdd2GoogleH(evt)
+        {
+          itm=document.getElementById("Add2GoogleH");
+          val=itm.value;
+          if (val> 200.0)
+            itm.value=200.0;
+          if (val< 1.0)
+            itm.value=1.0;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+        document.getElementById("MaxFootPrintLen").addEventListener("blur", tMaxFootPrintLen);
+        document.getElementById("MaxFootPrintLen").addEventListener("keypress", function(event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            
+            tMaxFootPrintLen(event);
+          }
+        });
+        function tMaxFootPrintLen(evt)
+        {
+          itm=document.getElementById("MaxFootPrintLen");
+          val=itm.value;
+          if (val> 500.0)
+            itm.value=500.0;
+          if (val< 100.0)
+            itm.value=100.0;
+
+          if(IsGoLive==1)
+          {
+            GoLiveAction(evt);
+          }
+        }
+
+
+
+      });
+
+      
+      function readTextFile(file)
+      {
+        var rawFile = new XMLHttpRequest();
+        rawFile.open("GET", file, false);
+        rawFile.onreadystatechange = function ()
+        {
+          if(rawFile.readyState === 4)
+          {
+            if(rawFile.status === 200 || rawFile.status == 0)
+            {
+                var allText = rawFile.responseText;
+                alert(allText);
+            }
+          }
+        }
+        rawFile.send(null);
+      }
+
+      
+
+      
+      
+      
+    </script>
+
+
+
+
+  </head>
+  
+  <body>
+    <h1>Drone Planning & Google Earth Tool</h1>
+    <!--<p>Page views <span id="visits"></span> </p> -->
+    <p style="color: red"> Watch the video for a quick tutorial &#8594 &#8594 &#8594</p>
+    <div class="grid-container">
+        <div class="InputSection">
+
+          <div class="InputSubSection">
+            <div>ProjectName</div>
+            
+            <div><input type="text" id="ProjectName" value="Project_0001" size="10" onkeypress="return /[0-9a-zA-Z_]/i.test(event.key)"></div>
+
+            <div>Fly Ht(m)</div>
+            <div><input type="number" id="H" step="any" value="30.0" style="width:2em"></div>
+            
+            <div><button id="LoadProject" type="button">LoadProject</button></div>
+            <div><button id="SaveProject" type="button">SaveProject</button></div>
+
+            <div><input id="GoLive" type="button" value="GoLive"></div>
+
+
+          </div>
+            <div class="InputSubSection">
+            <div>Camera</div>
+            <div></div>
+
+            
+            
+            <div>FocLen(mm)</div>
+            <div><input type="number" id="F" step="any" value="4.79" min="1.0" max="50.0" style="width:3em"></div>
+            <div>PixSize(um)</div>
+            <div><input type="number" id="PixSize" step="any" value="1.64" style="width:3em"></div>
+            
+            <div>#PixAlong</div>
+            <div><input type="number" id="NAlong" onkeydown="if(event.key==='.'){event.preventDefault();}" oninput="event.target.value = event.target.value.replace(/[^0-9]*/g,'');" value="2250" style="width:3em"></div>
+            <div>#PixAcros</div>
+            <div><input type="number" id="NAcros" onkeydown="if(event.key==='.'){event.preventDefault();}" oninput="event.target.value = event.target.value.replace(/[^0-9]*/g,'');" value="4000" style="width:3em"></div>
+          
+            
+          </div>
+          <div class="InputSubSection">
+
+
+            <div>2D</div>
+            <div><input type="checkbox" id="D2" name="D2" checked></div>
+            <div>FlightDir(deg)</div>
+            <div><input type="number" id="FlightDir" step="any" value="0.0" style="width:2em"></div>
+            
+            <div>Overlap(%)</div>
+            <div><input type="number" id="Overlap" step="any" value="70.0" style="width:2em"></div>
+            <div>Sidelap(%)</div>
+            <div><input type="number" id="Sidelap" step="any" value="60.0" style="width:2em"></div>
+
+            <div>SwitchDirection</div>
+            <div><input type="checkbox" id="SwitchDirection" name="SwitchDirection" unchecked></div>
+            <div>SwitchBeginEnd</div>
+            <div><input type="checkbox" id="SwitchBeginEnd" name="SwitchBeginEnd" unchecked></div>
+            
+            
+            <div>ExtendCoverage</div>
+            <div><input type="checkbox" id="ExtendCoverage" name="ExtendCoverage" unchecked></div>
+
+            <div><input id="Download_2D_Kml" type="button" value="Download_2D_Kml" disabled></div>
+            <div></div>
+            <div><input id="Download_2D_Photo_WayPoints" type="button" value="Download_2D_Photo_WayPoints" disabled></div>
+            <div></div>
+            <div><input id="Download_2D_Video_WayPoints" type="button" value="Download_2D_Video_WayPoints" disabled></div>
+          </div>
+          <div class="InputSub3Section">
+            <div>Snapping</div>
+            <div></div>
+            <div></div>
+            <div>SnapX</div>
+            <div><input type="number" id="SnapX" value="0.0" style="width:2em" disabled></div>
+            <div></div>
+            <div>SnapY</div>
+            <div><input type="number" id="SnapY" value="0.0"  style="width:2em" disabled></div>
+            <div></div>
+
+            <div></div>
+            <div><button id="Up" type="button">&#8593</button></div>
+            <div></div>
+            <div><button id="Left" type="button">&#8592</button></div>
+            <div><input type="number" id="MoveStep" step="any" value="1.0" style="width:2em"></div>
+            <div><button id="Right" type="button">&#8594</button></div>
+            <div></div>
+            <div><button id="Down" type="button">&#8595</button></div>
+            
+
+            
+            
+            
+            
+          </div>
+          <div class="InputSubSection">
+            <div>3D</div>
+            <div><input type="checkbox" id="D3" name="D3" checked></div>
+
+            <div>SpacingX(m)</div>
+            <div><input type="number" id="SpacingX" step="any" value="10.0" style="width:2em"></div>
+            <div>SpacingAng(deg)</div>
+            <div><input type="number" id="SpacingAng" step="any" value="30.0" style="width:2em"></div>
+            
+            <div>MinTilt(deg)</div>
+            <div><input type="number" id="MinTilt" step="any" value="0.0" style="width:2em"></div>
+            <div>StepTilt(deg)</div>
+            <div><input type="number" id="StepTilt" step="any" value="30.0" style="width:2em"></div>
+            <div>MaxTilt(deg)</div>
+            <div><input type="number" id="MaxTilt" step="any" value="90.0" style="width:2em"></div>
+
+            <div>ReverseDirection</div>
+            <div><input type="checkbox" id="ReverseDirection" name="ReverseDirection" unchecked></div>
+
+            <div><input id="Download_3D_Kml" type="button" value="Download_3D_Kml" disabled></div>
+            <div></div>
+            <div><input id="Download_3D_Photo_WayPoints" type="button" value="Download_3D_Photo_WayPoints" disabled></div>
+            <div></div>
+            <div><input id="Download_3D_Video_WayPoints" type="button" value="Download_3D_Video_WayPoints" disabled></div>
+
+          </div>
+          <div class="InputSubSection">
+            <div>Google Earth Display</div>
+            <div></div>
+            <div>BuildingHt(m)</div>
+            <div><input type="number" id="BuildingHt" step="any" value="7.0" style="width:2em"></div>
+            <div>#FootPrintPoints</div>
+            <div><input type="number" id="NFootPrint" onkeydown="if(event.key==='.'){event.preventDefault();}" oninput="event.target.value = event.target.value.replace(/[^0-9]*/g,'');" value="10" style="width:2em"></div>
+            <div>View Elevation(m)</div>
+            <div><input type="number" id="Add2GoogleH" step="any" value="20.0" style="width:2em"></div>
+            <div>MaxFootPrintLen(m)</div>
+            <div><input type="number" id="MaxFootPrintLen" step="any" value="500.0" style="width:2em"></div>
+
+          </div>
+
+        </div>
+        
+        <div class="YoutubeSection">
+            <iframe width="480" height="270"
+           
+            src="https://www.youtube.com/embed/OMYhqiSTgSI">
+            </iframe>
+        </div>
+        
+        
+    </div>
+
+    <div id="viewDiv" class="GraphicsSection"></div>
+
+    <!--script src="CountVisits.js"></script-->
+  </body>
+</html>
